@@ -1,0 +1,39 @@
+#!/usr/bin/python3
+
+import glob
+import subprocess
+import re
+
+
+def get_size():
+    memory_file = glob.glob('**/memory.x', recursive=True)
+    binary_file = glob.glob('**/bikepov', recursive=True)
+
+    if len(memory_file) != 1 and len(binary_file) != 1:
+        print('More than one file found')
+        return
+
+    with open(memory_file[0], 'r') as f:
+        contents = f.read()
+        total_flash = re.search(
+            '.*FLASH.*?(?P<len>\d+)K', contents).group('len')
+        total_ram = re.search('.*RAM.*?(?P<len>\d+)K', contents).group('len')
+
+    args = ['arm-none-eabi-size', binary_file[0]]
+    with subprocess.Popen(args, stdout=subprocess.PIPE) as proc:
+        output = proc.stdout.read().decode('utf-8')
+        regex = re.compile(r'(?P<text>\d+)\s+(?P<data>\d+)\s+(?P<bss>\d+)')
+        match = regex.search(output)
+        flash = int(match.group('text')) + int(match.group('data'))
+        ram = int(match.group('bss')) + int(match.group('data'))
+
+
+    flash_usage = flash / (int(total_flash) * 1000)
+    ram_usage = ram / (int(total_ram) * 1000)
+
+    print('Overall Usage')
+    print('\t Flash: {:.2f}%\t RAM: {:.2f}%'.format(flash_usage * 100, ram_usage * 100))
+
+
+if __name__ == '__main__':
+    get_size()
