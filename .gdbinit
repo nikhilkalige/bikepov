@@ -14,5 +14,8 @@ monitor arm semihosting enable
 # # enable ITM port 0
 # monitor itm port 0 on
 
+source cmdebug/svd_gdb.py
+svd_load ../stm32f411/svd/STM32F411.svd
+
 load
 step
