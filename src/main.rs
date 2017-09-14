@@ -15,6 +15,10 @@ use rtfm::{app, Threshold};
 use semihosting::hio;
 use bsp::spi2;
 use bsp::dma2 as dma;
+use bsp::timer::Channel;
+use bsp::pwm2::Pwm;
+use bsp::tlc5955::TLC5955;
+use bsp::time::Hertz;
 use bsp::prelude::*;
 
 pub mod setup;
@@ -31,7 +35,7 @@ app! {
         DMA2_STREAM2: {
             path: transfer_done,
             resources: [
-                BUFFER, 
+                BUFFER,
                 DMA2],
         },
     },
@@ -55,19 +59,36 @@ app! {
 //         resources: [ITM, SPI1]
 //     }
 // }
+const FREQUENCY: Hertz = Hertz(1_000);
 
 fn init(p: init::Peripherals, r: init::Resources) {
     writeln!(hio::hstdout().unwrap(), "Setting up peripherals").unwrap();
-    setup::spi_setup(&p);
-    setup::dma_setup(&p);
-    
-    let dma_tx = dma::Dma::new(p.DMA2, dma::DMAStream::Stream2);
-    
-    let spi = spi2::Spi::new(p.SPI1, spi2::Role::MASTER, None, Some(&dma_tx));
-    spi.enable();
 
-    r.BUFFER.borrow_mut().clone_from_slice(b"Hello, world!\n");
-    spi.send_dma(r.BUFFER).unwrap();
+//    setup::spi_setup(&p);
+//    setup::dma_setup(&p);
+    setup::pwm_setup(&p);
+
+//    let dma_tx = dma::Dma::new(p.DMA2, dma::DMAStream::Stream2);
+
+//    let spi = spi2::Spi::new(p.SPI1, spi2::Role::MASTER, None, Some(&dma_tx));
+//    spi.enable();
+
+    //let timer = timer::Timer::new(p.TIM4);
+    let pwm = Pwm(p.TIM1);
+    pwm.init(FREQUENCY.invert());
+    let duty = pwm.get_max_duty() / 16;
+
+    const CHANNELS: [Channel; 1] = [Channel::_1];
+    for c in &CHANNELS {
+        pwm.set_duty(*c, duty);
+        pwm.enable(*c);
+    }
+
+//    r.BUFFER.borrow_mut().clone_from_slice(b"Hello, world!\n");
+//    spi.send_dma(r.BUFFER).unwrap();
+
+//    let tlc = TLC5955::new(1);
+//    tlc.setall_dcdata(r.BUFFER, 19);
 }
 
 fn idle(_t: &mut Threshold, _r: idle::Resources) -> ! {
@@ -89,7 +110,7 @@ fn idle(_t: &mut Threshold, _r: idle::Resources) -> ! {
 }
 
 fn transfer_done(_t: &mut Threshold, r: DMA2_STREAM2::Resources) {
-    r.BUFFER.release(r.DMA2, dma::DMAStream::Stream2).unwrap();
+//    r.BUFFER.release(r.DMA2, dma::DMAStream::Stream2).unwrap();
 
     // rtfm::bkpt();
 }

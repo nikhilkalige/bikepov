@@ -15,7 +15,7 @@ pub fn dma_setup(p: &stm32f411::Peripherals) {
     dma_rx.memory_increment(true);
     dma_rx.direction(dma2::Direction::PERIPH_TO_MEMORY);
     dma_rx.reg.s0cr.modify(|_, w| w.tcie().set_bit());
-    
+
     dma_tx.channel(dma2::Channel::CHANNEL_2);
     dma_tx.priority(dma2::Priority::MEDIUM);
     dma_tx.memdata_alignment(dma2::DataSize::BYTE);
@@ -63,4 +63,25 @@ pub fn spi_setup(p: &stm32f411::Peripherals) {
     spi.nss(spi2::NSS::HardOutput);
 
     spi.reg.cr2.modify(|_, w| w.txdmaen().set_bit());
+}
+
+
+pub fn pwm_setup(p: &stm32f411::Peripherals) {
+    p.RCC.ahb1enr.modify(|_, w| w.gpioaen().set_bit());
+    p.RCC.apb2enr.modify(|_, w| w.tim1en().set_bit());
+
+    unsafe {
+        p.GPIOA.moder.modify(|_, w| {
+            w.moder8().bits(0b10)
+        });
+
+        p.GPIOA.afrh.modify(|_, w| {
+            w.afrh8().bits(0b1)
+        });
+
+        p.GPIOA.ospeedr.modify(|_, w| {
+            w.ospeedr8().bits(0b10)
+        })
+    }
+
 }
