@@ -2,6 +2,7 @@ use core::marker::Unsize;
 use cortex_m::itm as Itm;
 use numtoa::NumToA;
 
+use bsp;
 use bsp::stm32f411::{GPIOA, GPIOB, SYST, SPI4, DMA2, ITM};
 use bsp::spi2;
 use bsp::dma2;
@@ -9,7 +10,8 @@ use bsp::gpio;
 use bsp::time::Microseconds;
 use bsp::delay::delay_us;
 use bsp::dma2::Buffer;
-use hal::serial::{Write};
+use bsp::prelude::*;
+// use hal::serial::{Write};
 
 use static_ref::Static;
 
@@ -25,8 +27,29 @@ pub const MISO: gpio::Pin<GPIOA> = gpio::Pin::new(11);
 pub const MOSI: gpio::Pin<GPIOA> = gpio::Pin::new(1);
 
 
+pub fn log_buffer<S>(serial: &S, buffer: &[u8]) -> Result<(), S::Error>
+where
+    S: _embedded_hal_serial_Write<u8>
+{
+    for &byte in buffer {
+        block!(serial.write(byte))?;
+    }
+
+    Ok(())
+}
+
+pub fn log_number<S>(serial: &S, num: u8) -> Result<(), S::Error>
+where
+    S: _embedded_hal_serial_Write<u8>
+{
+    let mut num_string = [0u8; 20];
+    let start = num.numtoa(16, &mut num_string);
+    log_buffer(serial, &num_string[start..])
+}
+
+
 pub struct TLCHardwareInterface<'a, S>
-    where S: 'a + Write<u8>
+    where S: 'a +  _embedded_hal_serial_Write<u8>
 {
     syst: &'a SYST,
     gpioa: &'a GPIOA,
@@ -38,7 +61,7 @@ pub struct TLCHardwareInterface<'a, S>
 }
 
 impl<'a, S> TLCHardwareInterface<'a, S>
-    where S: 'a + Write<u8>
+    where S: 'a +  _embedded_hal_serial_Write<u8>
 {
     pub const fn new(syst: &'a SYST, gpioa: &'a GPIOA, gpiob: &'a GPIOB,
         spi: &'a spi2::Spi<'a, SPI4, DMA2>, dma: &'a DMA2, itm: &'a ITM,
@@ -46,19 +69,28 @@ impl<'a, S> TLCHardwareInterface<'a, S>
         TLCHardwareInterface { syst, gpioa, gpiob, spi, dma, itm, log}
     }
 
+    // fn print_number(&self, num: u8) {
+    //     let mut num_string = [0u8; 20];
+    //     if num < 16 {
+    //         Itm::write_all(&self.itm.stim[0], b"0");
+    //     }
+    //     let start = num.numtoa(16, &mut num_string);
+    //     Itm::write_all(&self.itm.stim[0], &num_string[start..]);
+    //     Itm::write_all(&self.itm.stim[0], b" ");
+    // }
+
     fn print_number(&self, num: u8) {
         let mut num_string = [0u8; 20];
         if num < 16 {
-            Itm::write_all(&self.itm.stim[0], b"0");
+            self.debug("0");
         }
         let start = num.numtoa(16, &mut num_string);
-        Itm::write_all(&self.itm.stim[0], &num_string[start..]);
-        Itm::write_all(&self.itm.stim[0], b" ");
+        log_buffer(self.log, &num_string[start..]).is_ok();
     }
 }
 
 impl<'a, S> TLCHardwareLayer for TLCHardwareInterface<'a, S>
-    where S: 'a + Write<u8>
+    where S: 'a +  _embedded_hal_serial_Write<u8>
 {
     fn as_gpio(&self) {
         CLK.set_mode(self.gpiob, gpio::Mode::Output);
@@ -113,18 +145,23 @@ impl<'a, S> TLCHardwareLayer for TLCHardwareInterface<'a, S>
         let mut counter = 0;
         for chunk in buffer.chunks(16) {
             self.print_number(counter);
+            self.debug("  ");
 
-            for byte in chunk {
-                self.print_number(*byte);
+            for small_chunk in chunk.chunks(4) {
+                for byte in small_chunk {
+                    self.print_number(*byte);
+                }
+                self.debug(" ");
             }
 
-            Itm::write_all(&self.itm.stim[0], b"\n");
+            self.debug("\n");
             counter += 16;
         }
     }
 
-    fn debug(&self, data: &str) {
-        Itm::write_str(&self.itm.stim[0], data);
+    fn debug<'b>(&self, data: &'b str) {
+        // Itm::write_str(&self.itm.stim[0], data);
+        log_buffer(self.log, data.as_bytes()).is_ok();
     }
 
 

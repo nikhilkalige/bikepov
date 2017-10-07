@@ -27,9 +27,13 @@ use bsp::dma2 as dma;
 use bsp::timer::Channel;
 use bsp::pwm2::Pwm;
 use bsp::tlc5955::TLC5955;
-use bsp::time::Hertz;
+use bsp::time::{Hertz, Milliseconds};
 use bsp::prelude::*;
+use bsp::gpio;
+use bsp::delay::delay_ms;
 // use hal::prelude::*;
+// use bsp::prelude::Write;
+// use bsp::prelude::Pwm;
 
 pub mod setup;
 pub mod tlc;
@@ -71,8 +75,29 @@ app! {
 //         resources: [ITM, SPI1]
 //     }
 // }
-const FREQUENCY: Hertz = Hertz(1_000);
+// const FREQUENCY: Hertz = Hertz(1_000);
+const FREQUENCY: Hertz = Hertz(50_000);
+const data: &[u8] =&[0x01, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x02, 0xF7, 0x6E, 0xDD, 0x6D, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56,
+0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A,
+0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A];
 
+const data1: [u8; 97] = [
+0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+0x00, 0x02, 0xF7, 0x6E, 0xDD, 0x6D, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56,
+0xAD, 0x5A,
+
+0x00, 0x00, 0x00, 0x00, 0x02, 0x30,
+
+0x5A,  0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A,
+0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A];
+
+use bsp::tlc5955::TLCHardwareLayer;
 fn init(p: init::Peripherals, r: init::Resources) {
     // writeln!(hio::hstdout().unwrap(), "Setting up peripherals").unwrap();
     // iprintln!(&p.ITM.stim[0], "Hello");
@@ -84,16 +109,28 @@ fn init(p: init::Peripherals, r: init::Resources) {
     let serial = Serial(p.USART2);
     serial.init(Hertz(115200).invert());
 
-    serial.write("Setup in progress\n").is_ok();
+    serial.write("\n\nSetup in progress\n").is_ok();
 
     let dma_tx = dma::Dma::new(p.DMA2, dma::DMAStream::Stream1);
     let dma_rx = dma::Dma::new(p.DMA2, dma::DMAStream::Stream4);
 
     let spi = spi2::Spi::new(p.SPI4, spi2::Role::MASTER, Some(&dma_rx), Some(&dma_tx));
     spi.enable();
-    // dma_tx.enable();
 
+
+    // {
+    //     let mut count = 0;
+    //     for byte in r.BUFFER.borrow_mut().iter_mut() {
+    //         *byte = count;
+    //         count += 1;
+    //     }
+    // }
+
+    // spi.rxtx_dma(r.BUFFER, r.RX_BUFFER).is_ok();
+    // block!(r.BUFFER.release(p.DMA2)).unwrap();
+    // block!(r.RX_BUFFER.release(p.DMA2)).unwrap();
     //let timer = timer::Timer::new(p.TIM4);
+
     let pwm = Pwm(p.TIM1);
     pwm.init(FREQUENCY.invert());
     let duty = pwm.get_max_duty() / 2;
@@ -101,19 +138,96 @@ fn init(p: init::Peripherals, r: init::Resources) {
     const CHANNELS: [Channel; 1] = [Channel::_1];
     for c in &CHANNELS {
         pwm.set_duty(*c, duty);
-        // pwm.enable(*c);
+        pwm.enable(*c);
     }
 
-//    r.BUFFER.borrow_mut().clone_from_slice(b"Hello, world!\n");
-//    spi.send_dma(r.BUFFER).unwrap();
-    // *r.BUFFER.borrow_mut().last_mut().unwrap() = 0;
-    writeln!(hio::hstdout().unwrap(), "Filling").unwrap();
-    // fill_control_data(&mut *r.BUFFER.borrow_mut());
-    writeln!(hio::hstdout().unwrap(), "Filling Done").unwrap();
-    let mut tlc = TLC5955::new(1);
+
+    // let mut tlc = TLC5955::new(1);
     let driver = tlc::TLCHardwareInterface::new(p.SYST, p.GPIOA, p.GPIOB, &spi,
         p.DMA2, p.ITM, &serial);
-    tlc.setup(r.BUFFER, r.RX_BUFFER, &driver);
+
+
+    let mut buffer: [u8; 97] = [0; 97];
+    let mut buffer2: [u8; 97] = [0; 97];
+    let mut index = 0;
+
+    // Send control data...
+    for byte in data {
+        while spi.send(*byte).is_err() {}
+        let junk = loop {
+            if let Ok(byte) = spi.read() {
+                break byte;
+            }
+        };
+        buffer[index] = junk;
+        index += 1;
+    }
+    ::tlc::LATCH.set(p.GPIOA, gpio::Io::High);
+    ::tlc::LATCH.set(p.GPIOA, gpio::Io::Low);
+    driver.dump_buffer(&buffer);
+
+    // Send zeros...
+    index = 0;
+    for byte in buffer2.iter() {
+        while spi.send(*byte).is_err() {}
+        let junk = loop {
+            if let Ok(byte) = spi.read() {
+                break byte;
+            }
+        };
+        buffer[index] = junk;
+        index += 1;
+    }
+    ::tlc::LATCH.set(p.GPIOA, gpio::Io::High);
+    ::tlc::LATCH.set(p.GPIOA, gpio::Io::Low);
+    driver.dump_buffer(&buffer);
+
+    // Send control again...
+    index = 0;
+    for byte in data {
+        while spi.send(*byte).is_err() {}
+        let junk = loop {
+            if let Ok(byte) = spi.read() {
+                break byte;
+            }
+        };
+        //let x = &mut buffer[index];
+        buffer[index] = junk;
+        index += 1;
+    }
+    ::tlc::LATCH.set(p.GPIOA, gpio::Io::High);
+    ::tlc::LATCH.set(p.GPIOA, gpio::Io::Low);
+    driver.dump_buffer(&buffer);
+
+    // Send gs data...
+    buffer2.copy_from_slice(&data1);
+    loop {
+        index = 0;
+        // for byte in buffer2[67..73].iter_mut() {
+        driver.dump_buffer(&buffer2);
+        for byte in buffer2[72..73].iter_mut() {
+            *byte = byte.wrapping_add(25);
+        }
+        serial.write("Update...\n");
+        driver.dump_buffer(&buffer2);
+        for byte in buffer2.iter() {
+            while spi.send(*byte).is_err() {}
+            let junk = loop {
+                if let Ok(byte) = spi.read() {
+                    break byte;
+                }
+            };
+            buffer[index] = junk;
+            index += 1;
+        }
+        ::tlc::LATCH.set(p.GPIOA, gpio::Io::High);
+        ::tlc::LATCH.set(p.GPIOA, gpio::Io::Low);
+
+        delay_ms(p.SYST, Milliseconds(2000));
+    }
+
+
+   // tlc.setup(r.BUFFER, r.RX_BUFFER, &driver);
 }
 
 fn idle(_t: &mut Threshold, _r: idle::Resources) -> ! {
