@@ -42,8 +42,8 @@ app! {
     device: bsp::stm32f411,
 
     resources: {
-        static BUFFER: dma::Buffer<[u8; 96]> = dma::Buffer::new([0; 96], dma::DMAStream::Stream1);
-        static RX_BUFFER: dma::Buffer<[u8; 96]> = dma::Buffer::new([0; 96], dma::DMAStream::Stream4);
+        static BUFFER: dma::Buffer<[u8; 97]> = dma::Buffer::new([0; 97], dma::DMAStream::Stream1);
+        static RX_BUFFER: dma::Buffer<[u8; 97]> = dma::Buffer::new([0; 97], dma::DMAStream::Stream4);
     },
 
     tasks: {
@@ -77,6 +77,8 @@ app! {
 // }
 // const FREQUENCY: Hertz = Hertz(1_000);
 const FREQUENCY: Hertz = Hertz(50_000);
+
+/*
 const data: &[u8] =&[0x01, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -96,11 +98,10 @@ const data1: [u8; 97] = [
 
 0x5A,  0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A,
 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A];
+*/
 
 use bsp::tlc5955::TLCHardwareLayer;
 fn init(p: init::Peripherals, r: init::Resources) {
-    // writeln!(hio::hstdout().unwrap(), "Setting up peripherals").unwrap();
-    // iprintln!(&p.ITM.stim[0], "Hello");
     setup::spi_setup(&p);
     setup::dma_setup(&p);
     setup::pwm_setup(&p);
@@ -108,7 +109,6 @@ fn init(p: init::Peripherals, r: init::Resources) {
 
     let serial = Serial(p.USART2);
     serial.init(Hertz(115200).invert());
-
     serial.write("\n\nSetup in progress\n").is_ok();
 
     let dma_tx = dma::Dma::new(p.DMA2, dma::DMAStream::Stream1);
@@ -116,20 +116,6 @@ fn init(p: init::Peripherals, r: init::Resources) {
 
     let spi = spi2::Spi::new(p.SPI4, spi2::Role::MASTER, Some(&dma_rx), Some(&dma_tx));
     spi.enable();
-
-
-    // {
-    //     let mut count = 0;
-    //     for byte in r.BUFFER.borrow_mut().iter_mut() {
-    //         *byte = count;
-    //         count += 1;
-    //     }
-    // }
-
-    // spi.rxtx_dma(r.BUFFER, r.RX_BUFFER).is_ok();
-    // block!(r.BUFFER.release(p.DMA2)).unwrap();
-    // block!(r.RX_BUFFER.release(p.DMA2)).unwrap();
-    //let timer = timer::Timer::new(p.TIM4);
 
     let pwm = Pwm(p.TIM1);
     pwm.init(FREQUENCY.invert());
@@ -141,112 +127,13 @@ fn init(p: init::Peripherals, r: init::Resources) {
         pwm.enable(*c);
     }
 
-
-    // let mut tlc = TLC5955::new(1);
+    let mut tlc = TLC5955::new(1);
     let driver = tlc::TLCHardwareInterface::new(p.SYST, p.GPIOA, p.GPIOB, &spi,
         p.DMA2, p.ITM, &serial);
-
-
-    let mut buffer: [u8; 97] = [0; 97];
-    let mut buffer2: [u8; 97] = [0; 97];
-    let mut index = 0;
-
-    // Send control data...
-    for byte in data {
-        while spi.send(*byte).is_err() {}
-        let junk = loop {
-            if let Ok(byte) = spi.read() {
-                break byte;
-            }
-        };
-        buffer[index] = junk;
-        index += 1;
-    }
-    ::tlc::LATCH.set(p.GPIOA, gpio::Io::High);
-    ::tlc::LATCH.set(p.GPIOA, gpio::Io::Low);
-    driver.dump_buffer(&buffer);
-
-    // Send zeros...
-    index = 0;
-    for byte in buffer2.iter() {
-        while spi.send(*byte).is_err() {}
-        let junk = loop {
-            if let Ok(byte) = spi.read() {
-                break byte;
-            }
-        };
-        buffer[index] = junk;
-        index += 1;
-    }
-    ::tlc::LATCH.set(p.GPIOA, gpio::Io::High);
-    ::tlc::LATCH.set(p.GPIOA, gpio::Io::Low);
-    driver.dump_buffer(&buffer);
-
-    // Send control again...
-    index = 0;
-    for byte in data {
-        while spi.send(*byte).is_err() {}
-        let junk = loop {
-            if let Ok(byte) = spi.read() {
-                break byte;
-            }
-        };
-        //let x = &mut buffer[index];
-        buffer[index] = junk;
-        index += 1;
-    }
-    ::tlc::LATCH.set(p.GPIOA, gpio::Io::High);
-    ::tlc::LATCH.set(p.GPIOA, gpio::Io::Low);
-    driver.dump_buffer(&buffer);
-
-    // Send gs data...
-    buffer2.copy_from_slice(&data1);
-    loop {
-        index = 0;
-        // for byte in buffer2[67..73].iter_mut() {
-        driver.dump_buffer(&buffer2);
-        // for byte in buffer2[71..73].iter_mut() {
-        for byte in buffer2[71..73].chunks_mut(2) {
-            let mut num: u16 = ((byte[0] as u16) << 8) | byte[1] as u16;
-            num = num.wrapping_add(2048);
-            byte[0] = (num >> 8) as u8;
-            byte[1] = num as u8;
-        }
-        serial.write("Update...\n");
-        driver.dump_buffer(&buffer2);
-        for byte in buffer2.iter() {
-            while spi.send(*byte).is_err() {}
-            let junk = loop {
-                if let Ok(byte) = spi.read() {
-                    break byte;
-                }
-            };
-            buffer[index] = junk;
-            index += 1;
-        }
-        ::tlc::LATCH.set(p.GPIOA, gpio::Io::High);
-        ::tlc::LATCH.set(p.GPIOA, gpio::Io::Low);
-
-        delay_ms(p.SYST, Milliseconds(2000));
-    }
-
-
-   // tlc.setup(r.BUFFER, r.RX_BUFFER, &driver);
+    tlc.setup(r.BUFFER, r.RX_BUFFER, &driver);
 }
 
 fn idle(_t: &mut Threshold, _r: idle::Resources) -> ! {
-    // let spi = spi2::Spi::<_, bsp::stm32f411::DMA1>::new(&*r.SPI1, spi2::Role::MASTER, None, None);
-    // spi.enable();
-
-    // loop {
-        // for i in 0..255 {
-            // while spi.send(i).is_err() {}
-            // while spi.read().is_err() {}
-            // writeln!(hio::hstdout().unwrap(), "Finished sending {}", i).unwrap();
-        // }
-    // }
-
-    writeln!(hio::hstdout().unwrap(), "Finished sending").unwrap();
     loop {
         rtfm::wfi();
     }
@@ -260,6 +147,7 @@ fn transfer_done(_t: &mut Threshold, r: DMA2_STREAM1::Resources) {
     // rtfm::bkpt();
 }
 
+/*
 fn fill_control_data(buffer: &mut[u8]) {
     let mut pos = 0;
     for index in 0..48 {
@@ -289,3 +177,4 @@ fn add_bits(buffer: &mut[u8], mut val: u32, mut size: u32, mut pos: usize) -> us
     }
     return pos;
 }
+*/
