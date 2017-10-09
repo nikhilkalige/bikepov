@@ -103,11 +103,8 @@ impl<'a, S> TLCHardwareLayer for TLCHardwareInterface<'a, S>
     }
 
     fn latch(&self, delay: u32) {
-        delay_us(self.syst, Microseconds(delay));
         LATCH.set(self.gpioa, gpio::Io::High);
-        delay_us(self.syst, Microseconds(delay));
         LATCH.set(self.gpioa, gpio::Io::Low);
-        delay_us(self.syst, Microseconds(delay));
     }
 
     fn write_bit(&self, bit: u8) {
@@ -131,6 +128,15 @@ impl<'a, S> TLCHardwareLayer for TLCHardwareInterface<'a, S>
     {
         // self.spi.send_dma(buffer).unwrap();
         self.spi.rxtx_dma(tx_buffer, rx_buffer).unwrap();
+    }
+
+    fn read_write_byte(&self, byte: u8) -> u8 {
+        while self.spi.send(byte).is_err() {}
+        loop {
+            if let Ok(byte) = self.spi.read() {
+                break byte;
+            }
+        }
     }
 
 
