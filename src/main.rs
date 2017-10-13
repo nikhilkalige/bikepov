@@ -42,8 +42,8 @@ app! {
     device: bsp::stm32f411,
 
     resources: {
-        static BUFFER: dma::Buffer<[u8; 97]> = dma::Buffer::new([0; 97], dma::DMAStream::Stream1);
-        static RX_BUFFER: dma::Buffer<[u8; 97]> = dma::Buffer::new([0; 97], dma::DMAStream::Stream4);
+        static BUFFER: dma::Buffer<[u8; 96]> = dma::Buffer::new([0; 96], dma::DMAStream::Stream1);
+        static RX_BUFFER: dma::Buffer<[u8; 96]> = dma::Buffer::new([0; 96], dma::DMAStream::Stream4);
     },
 
     tasks: {

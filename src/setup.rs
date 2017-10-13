@@ -64,8 +64,8 @@ pub fn spi_setup(p: &stm32f411::Peripherals) {
     // spi.nss(spi2::NSS::HardOutput);
     spi.nss(spi2::NSS::Soft);
 
-    // spi.reg.cr2.modify(|_, w| w.txdmaen().set_bit());
-    // spi.reg.cr2.modify(|_, w| w.rxdmaen().set_bit());
+    spi.reg.cr2.modify(|_, w| w.txdmaen().set_bit());
+    spi.reg.cr2.modify(|_, w| w.rxdmaen().set_bit());
 }
 
 

@@ -7,8 +7,8 @@ use bsp::stm32f411::{GPIOA, GPIOB, SYST, SPI4, DMA2, ITM};
 use bsp::spi2;
 use bsp::dma2;
 use bsp::gpio;
-use bsp::time::Microseconds;
-use bsp::delay::delay_us;
+use bsp::time::{Microseconds, Milliseconds};
+use bsp::delay::{delay_us, delay_ms};
 use bsp::dma2::Buffer;
 use bsp::prelude::*;
 // use hal::serial::{Write};
@@ -115,10 +115,13 @@ impl<'a, S> TLCHardwareLayer for TLCHardwareInterface<'a, S>
         }
         CLK.set(self.gpiob, gpio::Io::Low);
         CLK.set(self.gpiob, gpio::Io::High);
+        //MOSI.set(self.gpioa, gpio::Io::Low);
+        CLK.set(self.gpiob, gpio::Io::Low);
     }
 
     fn delay(&self, count: u16) {
-        delay_us(self.syst, Microseconds(count as u32));
+        // delay_us(self.syst, Microseconds(count as u32));
+        delay_ms(self.syst, Milliseconds(count as u32));
     }
 
 
