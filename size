@@ -6,10 +6,11 @@ import re
 
 
 def get_size():
-    memory_file = glob.glob('**/memory.x', recursive=True)
-    binary_file = glob.glob('**/bikepov', recursive=True)
+    memory_file = glob.glob('target/thumbv7em-none-eabihf/**/memory.x', recursive=True)
+    binary_file = glob.glob('target/thumbv7em-none-eabihf/**/bikepov', recursive=True)
 
     if len(memory_file) != 1 and len(binary_file) != 1:
+        print(memory_file, binary_file)
         print('More than one file found')
         return
 

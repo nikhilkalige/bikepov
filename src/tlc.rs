@@ -125,8 +125,8 @@ impl<'a, S> TLCHardwareLayer for TLCHardwareInterface<'a, S>
     }
 
 
-    fn write<B>(&self, tx_buffer: &Static<Buffer<B>>,
-        rx_buffer: &Static<Buffer<B>>)
+    fn write<B>(&self, tx_buffer: &Buffer<B>,
+        rx_buffer: &Buffer<B>)
         where B: Unsize<[u8]>
     {
         // self.spi.send_dma(buffer).unwrap();
@@ -143,7 +143,7 @@ impl<'a, S> TLCHardwareLayer for TLCHardwareInterface<'a, S>
     }
 
 
-    fn wait<B>(&self, buffer: &Static<Buffer<B>>)
+    fn wait<B>(&self, buffer: &Buffer<B>)
         where B: Unsize<[u8]>
     {
 //        block!(buffer.release(self.dma, dma2::DMAStream::Stream1)).unwrap();

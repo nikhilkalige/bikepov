@@ -38,19 +38,33 @@ use bsp::delay::delay_ms;
 pub mod setup;
 pub mod tlc;
 
+
+type LedBuffer = dma::Buffer<[u8; 96]>;
+const NO_LED_DRIVERS:u8 = 4;
+
 app! {
     device: bsp::stm32f411,
 
     resources: {
-        static BUFFER: dma::Buffer<[u8; 96]> = dma::Buffer::new([0; 96], dma::DMAStream::Stream1);
-        static RX_BUFFER: dma::Buffer<[u8; 96]> = dma::Buffer::new([0; 96], dma::DMAStream::Stream4);
+        static TX_BUFFER: [LedBuffer; NO_LED_DRIVERS as usize] = [
+            dma::Buffer::new([0; 96], dma::DMAStream::Stream1),
+            dma::Buffer::new([0; 96], dma::DMAStream::Stream1),
+            dma::Buffer::new([0; 96], dma::DMAStream::Stream1),
+            dma::Buffer::new([0; 96], dma::DMAStream::Stream1)
+        ];
+        static RX_BUFFER: [LedBuffer; NO_LED_DRIVERS as usize] = [
+            dma::Buffer::new([0; 96], dma::DMAStream::Stream4),
+            dma::Buffer::new([0; 96], dma::DMAStream::Stream4),
+            dma::Buffer::new([0; 96], dma::DMAStream::Stream4),
+            dma::Buffer::new([0; 96], dma::DMAStream::Stream4)
+        ];
     },
 
     tasks: {
         DMA2_STREAM1: {
             path: transfer_done,
             resources: [
-                BUFFER,
+                TX_BUFFER,
                 RX_BUFFER,
                 DMA2],
         },
@@ -130,7 +144,7 @@ fn init(p: init::Peripherals, r: init::Resources) {
     let mut tlc = TLC5955::new(1);
     let driver = tlc::TLCHardwareInterface::new(p.SYST, p.GPIOA, p.GPIOB, &spi,
         p.DMA2, p.ITM, &serial);
-    tlc.setup(r.BUFFER, r.RX_BUFFER, &driver);
+    tlc.setup(r.TX_BUFFER, r.RX_BUFFER, &driver);
 }
 
 fn idle(_t: &mut Threshold, _r: idle::Resources) -> ! {
@@ -141,9 +155,9 @@ fn idle(_t: &mut Threshold, _r: idle::Resources) -> ! {
 
 fn transfer_done(_t: &mut Threshold, r: DMA2_STREAM1::Resources) {
     // let dma = dma::Dma::new(&**r.DMA2, dma::DMAStream::Stream0);
-    r.BUFFER.release(&**r.DMA2).unwrap();
-    r.RX_BUFFER.release(&**r.DMA2).unwrap();
-    writeln!(hio::hstdout().unwrap(), "Buffer released").unwrap();
+    // r.TX_BUFFER.release(&**r.DMA2).unwrap();
+    // r.RX_BUFFER.release(&**r.DMA2).unwrap();
+    // writeln!(hio::hstdout().unwrap(), "Buffer released").unwrap();
     // rtfm::bkpt();
 }
 
