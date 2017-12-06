@@ -15,7 +15,7 @@ monitor tpiu config internal /tmp/itm.fifo uart off 16000000
 # # enable ITM port 0
 monitor itm port 0 on
 
-# dashboard -layout source
+dashboard -layout source
 
 # source cmdebug/svd_gdb.py
 # svd_load ../stm32f411/svd/STM32F411.svd
@@ -23,4 +23,6 @@ monitor itm port 0 on
 monitor reset halt
 load
 step
+# b spi2.rs:231
+# b tlc5955.rs:92
 continue

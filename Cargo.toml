@@ -27,6 +27,10 @@ git = "https://github.com/japaric/embedded-hal"
 optional = false
 path = "../bsp/"
 
+[dependencies.fastled]
+optional = false
+path = "../fastled/"
+
 # [dependencies.either]
 # default-features = false
 # version = "1.1.0"
@@ -45,7 +49,7 @@ version = "0.2.2"
 
 [dependencies.cortex-m-rt]
 features = ["abort-on-panic"]
-version = "0.3.0"
+version = "0.3.6"
 
 [dependencies.nb]
 git = "https://github.com/japaric/nb"

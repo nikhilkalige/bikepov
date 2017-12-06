@@ -12,6 +12,7 @@ extern crate cortex_m_rtfm as rtfm;
 extern crate cortex_m_semihosting as semihosting;
 extern crate numtoa;
 extern crate embedded_hal as hal;
+extern crate fastled;
 #[macro_use(iprint, iprintln)]
 extern crate cortex_m;
 #[macro_use]
