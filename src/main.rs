@@ -1,4 +1,3 @@
-//! Prints "Hello, World" in the OpenOCD console
 //#![deny(unsafe_code)]
 //#![deny(warnings)]
 #![feature(unsize)]
@@ -8,188 +7,156 @@
 #![no_std]
 
 extern crate bsp;
-extern crate cortex_m_rtfm as rtfm;
-extern crate cortex_m_semihosting as semihosting;
-extern crate numtoa;
-extern crate embedded_hal as hal;
-extern crate fastled;
 #[macro_use(iprint, iprintln)]
 extern crate cortex_m;
+extern crate cortex_m_rtfm as rtfm;
+extern crate cortex_m_semihosting as semihosting;
+extern crate embedded_hal as hal;
+extern crate logger;
 #[macro_use]
 extern crate nb;
 extern crate static_ref;
-use core::fmt::Write;
+extern crate tlc5955;
 
+use core::marker::Unsize;
+
+use bsp::stm32f411::{GPIOA, GPIOB};
 use rtfm::{app, Threshold};
-use semihosting::hio;
-use bsp::spi2;
-use bsp::serial::Serial;
-use bsp::dma2 as dma;
-use bsp::timer::Channel;
-use bsp::pwm2::Pwm;
-use bsp::tlc5955::TLC5955;
-use bsp::time::{Hertz, Milliseconds};
-use bsp::prelude::*;
-use bsp::gpio;
-use bsp::delay::delay_ms;
-// use hal::prelude::*;
-// use bsp::prelude::Write;
-// use bsp::prelude::Pwm;
 
-pub mod setup;
-pub mod tlc;
+use bsp::usart::{Tx, Usart};
+use bsp::pwm::PwmExt;
+use bsp::rcc::{ClockSource, RccExt};
+use bsp::gpio::{Io, Mode, Pupd, Speed};
+use bsp::spi::{DataSize, Role, Spi, NSS};
+use bsp::time::TimeExt;
+use bsp::gpio::{Gpio, GpioExt};
+use bsp::dma::{D2S1, D2S4};
 
+use hal::spi::{Mode as SpiMode, Phase, Polarity};
+use hal::serial::Write;
+use hal::digital::OutputPin;
 
-type LedBuffer = dma::Buffer<[u8; 96]>;
-const NO_LED_DRIVERS:u8 = 4;
+use tlc5955::{SpiWriteBit, Tlc5955};
+use logger::Logger;
+
+pub struct SerialLogger(pub Tx);
+
+impl Logger for SerialLogger {
+    type Error = u8;
+
+    fn log(&mut self, byte: u8) {
+        let SerialLogger(ref mut tx) = *self;
+        block!(tx.write(byte)).ok().unwrap();
+    }
+}
+
+struct BitWrite;
+
+// No clean way of doing this.
+// Choose a better chip next time :(
+impl SpiWriteBit for BitWrite {
+    fn write_bit(&self, bit: u8) {
+        unsafe {
+            Gpio::set_mode(&(*GPIOB::ptr()), 13, Mode::Output);
+            Gpio::set_mode(&(*GPIOA::ptr()), 1, Mode::Output);
+
+            if bit > 0 {
+                Gpio::set(&(*GPIOA::ptr()), 1, Io::High);
+            } else {
+                Gpio::set(&(*GPIOA::ptr()), 1, Io::Low);
+            }
+
+            Gpio::set(&(*GPIOB::ptr()), 13, Io::Low);
+            Gpio::set(&(*GPIOB::ptr()), 13, Io::High);
+            Gpio::set(&(*GPIOB::ptr()), 13, Io::Low);
+
+            Gpio::set_mode(&(*GPIOB::ptr()), 13, Mode::AlternateFunction);
+            Gpio::set_mode(&(*GPIOA::ptr()), 1, Mode::AlternateFunction);
+
+            Gpio::alternate_function(&(*GPIOB::ptr()), 13, 6);
+            Gpio::alternate_function(&(*GPIOA::ptr()), 1, 5);
+        }
+    }
+}
 
 app! {
     device: bsp::stm32f411,
 
-    resources: {
-        static TX_BUFFER: [LedBuffer; NO_LED_DRIVERS as usize] = [
-            dma::Buffer::new([0; 96], dma::DMAStream::Stream1),
-            dma::Buffer::new([0; 96], dma::DMAStream::Stream1),
-            dma::Buffer::new([0; 96], dma::DMAStream::Stream1),
-            dma::Buffer::new([0; 96], dma::DMAStream::Stream1)
-        ];
-        static RX_BUFFER: [LedBuffer; NO_LED_DRIVERS as usize] = [
-            dma::Buffer::new([0; 96], dma::DMAStream::Stream4),
-            dma::Buffer::new([0; 96], dma::DMAStream::Stream4),
-            dma::Buffer::new([0; 96], dma::DMAStream::Stream4),
-            dma::Buffer::new([0; 96], dma::DMAStream::Stream4)
-        ];
-    },
-
-    tasks: {
-        DMA2_STREAM1: {
-            path: transfer_done,
-            resources: [
-                TX_BUFFER,
-                RX_BUFFER,
-                DMA2],
-        },
-    },
-
-    idle: {
-        resources: [ITM, SPI4]
-    }
+    // resources: {
+    //     static RX: Tlc5955;
+    // },
 }
 
-// app! {
-//     device: bsp::stm32f411,
+fn init(p: init::Peripherals)  {
+    let mut rcc = p.device.RCC.split();
 
-//     tasks: {
-//         DMA1_STREAM3: {
-//             path: transfer_done,
-//             resources: [DMA1],
-//         },
-//     },
+    //rcc.cfgr.sysclk(64.mhz()).pclk1(30.mhz());
+    let clocks = rcc.cfgr.freeze(ClockSource::Hsi);
 
-//     idle: {
-//         resources: [ITM, SPI1]
-//     }
-// }
-// const FREQUENCY: Hertz = Hertz(1_000);
-const FREQUENCY: Hertz = Hertz(50_000);
+    let gpiob = p.device.GPIOB.split(&mut rcc.enr);
+    let gpioc = p.device.GPIOC.split(&mut rcc.enr);
+    let gpioa = p.device.GPIOA.split(&mut rcc.enr);
 
-/*
-const data: &[u8] =&[0x01, 0x96, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x00, 0x02, 0xF7, 0x6E, 0xDD, 0x6D, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56,
-0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A,
-0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A];
+    // Serial Tx, Rx
+    let pa2 = gpioa.pa2.as_alt_function();
+    let pa3 = gpioa.pa3.as_alt_function();
 
-const data1: [u8; 97] = [
-0x00,
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-0x00, 0x02, 0xF7, 0x6E, 0xDD, 0x6D, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56,
-0xAD, 0x5A,
+    // Leds
+    let mut pc1 = gpioc.pc1.as_output();
+    let mut pc2 = gpioc.pc2.as_output();
+    pc1.set_high();
+    pc2.set_high();
 
-0x00, 0x00, 0x00, 0x00, 0x00, 0x30,
+    let (tx, _rx) = Usart::new(
+        p.device.USART2,
+        (pa2, pa3),
+        115_200.bps(),
+        clocks,
+        &mut rcc.enr,
+    ).split();
 
-0x5A,  0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A,
-0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A, 0xD5, 0xAB, 0x56, 0xAD, 0x5A, 0xB5, 0x6A];
-*/
+    let mut logger = SerialLogger(tx);
+    logger.log_string("TLC5955 BikePov v0.1\n");
 
-use bsp::tlc5955::TLCHardwareLayer;
-fn init(p: init::Peripherals, r: init::Resources) {
-    setup::spi_setup(&p);
-    setup::dma_setup(&p);
-    setup::pwm_setup(&p);
-    setup::serial_setup(&p);
+    // Spi Clk, Miso, Mosi
+    let pb13 = gpiob.pb13.as_alt_function();
+    let pa11 = gpioa.pa11.as_alt_function();
+    let pa1 = gpioa.pa1.as_alt_function();
+    pa1.set_pupd(Pupd::PullUp);
+    pb13.set_pupd(Pupd::PullUp);
 
-    let serial = Serial(p.USART2);
-    serial.init(Hertz(115200).invert());
-    serial.write("\n\nSetup in progress\n").is_ok();
-
-    let dma_tx = dma::Dma::new(p.DMA2, dma::DMAStream::Stream1);
-    let dma_rx = dma::Dma::new(p.DMA2, dma::DMAStream::Stream4);
-
-    let spi = spi2::Spi::new(p.SPI4, spi2::Role::MASTER, Some(&dma_rx), Some(&dma_tx));
+    let spi = Spi::new(p.device.SPI4, (pb13, pa1, pa11), &mut rcc.enr);
+    spi.set_frequency(clocks, 250_000.hz());
+    let spi_mode = SpiMode {
+        phase: Phase::CaptureOnFirstTransition,
+        polarity: Polarity::IdleLow,
+    };
+    spi.set_role(Role::MASTER);
+    spi.set_mode(spi_mode);
+    spi.data_size(DataSize::_8BIT);
+    spi.msb_first(true);
+    spi.crc_calculation(false);
+    spi.nss(NSS::Soft);
     spi.enable();
 
-    let pwm = Pwm(p.TIM1);
-    pwm.init(FREQUENCY.invert());
-    let duty = pwm.get_max_duty() / 2;
+    // Latch
+    let pa0 = gpioa.pa0.as_output();
 
-    const CHANNELS: [Channel; 1] = [Channel::_1];
-    for c in &CHANNELS {
-        pwm.set_duty(*c, duty);
-        pwm.enable(*c);
-    }
+    // Pwm
+    let pa8 = gpioa.pa8.as_alt_function();
+    pa8.set_speed(Speed::Fast);
 
-    let mut tlc = TLC5955::new(1);
-    let driver = tlc::TLCHardwareInterface::new(p.SYST, p.GPIOA, p.GPIOB, &spi,
-        p.DMA2, p.ITM, &serial);
-    tlc.setup(r.TX_BUFFER, r.RX_BUFFER, &driver);
+    let pwm = PwmExt::pwm(p.device.TIM1, pa8, 50_000.hz(), clocks, &mut rcc.enr);
+
+    let bit_writer = BitWrite {};
+    // let tlc: Tlc5955<[u8; 1], _, _, _, _> =
+    let tlc = Tlc5955::new(spi, bit_writer, pa0, pwm, &mut logger, 4).unwrap();
+
+    //init::LateResources { RX: tlc }
 }
 
-fn idle(_t: &mut Threshold, _r: idle::Resources) -> ! {
+fn idle() -> ! {
     loop {
         rtfm::wfi();
     }
 }
-
-fn transfer_done(_t: &mut Threshold, r: DMA2_STREAM1::Resources) {
-    // let dma = dma::Dma::new(&**r.DMA2, dma::DMAStream::Stream0);
-    // r.TX_BUFFER.release(&**r.DMA2).unwrap();
-    // r.RX_BUFFER.release(&**r.DMA2).unwrap();
-    // writeln!(hio::hstdout().unwrap(), "Buffer released").unwrap();
-    // rtfm::bkpt();
-}
-
-/*
-fn fill_control_data(buffer: &mut[u8]) {
-    let mut pos = 0;
-    for index in 0..48 {
-        pos = add_bits(buffer, 7 as u32, 7, pos);
-    }
-
-    for index in 0..3 {
-        pos = add_bits(buffer, 3 as u32, 3, pos);
-    }
-
-    for index in 0..3 {
-        pos = add_bits(buffer, 3 as u32, 3, pos);
-    }
-    pos = add_bits(buffer, 0x0A as u32, 5, pos);
-    pos = 760;
-    add_bits(buffer, 0x96 as u32, 5, pos);
-}
-
-fn add_bits(buffer: &mut[u8], mut val: u32, mut size: u32, mut pos: usize) -> usize{
-    while (size > 0) {
-        if (val & 1) > 0 {
-            buffer[pos >> 3] |= 1 << (pos & 7);
-        }
-        val >>= 1;
-        pos += 1;
-        size -= 1;
-    }
-    return pos;
-}
-*/

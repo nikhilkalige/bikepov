@@ -6,38 +6,30 @@ version = "0.1.8"
 license = "MIT"
 
 [dependencies]
-cortex-m = "0.3.0"
-cortex-m-rtfm = "0.2.0"
+cortex-m = { git = "https://github.com/japaric/cortex-m" }
+# cortex-m-rtfm = "0.2.0"
 cortex-m-semihosting = "0.2.0"
 static-ref = "0.2.0"
 numtoa = "0.0.7"
 
 [dependencies.embedded-hal]
-git = "https://github.com/japaric/embedded-hal"
-
-# [dependencies.stm32f411]
-# optional = false
-# path = "../stm32f411/"
-
-# [dependencies.futures]
-# version = "0.1.14"
-# default-features = false
+# git = "https://github.com/japaric/embedded-hal"
+path = "../../rust-resources/embedded-hal/"
 
 [dependencies.bsp]
 optional = false
 path = "../bsp/"
 
+[dependencies.tlc5955]
+optional = false
+path = "../tlc5955/"
+
 [dependencies.fastled]
 optional = false
 path = "../fastled/"
 
-# [dependencies.either]
-# default-features = false
-# version = "1.1.0"
-
-# [dependencies.blue-pill]
-# git = "https://github.com/japaric/blue-pill"
-#rev = "2b7d5c56b25f4efad6c7c40042f884cbecb47c0b"
+[dependencies.logger]
+path = "../logger"
 
 [dependencies.byteorder]
 default-features = false
@@ -49,7 +41,10 @@ version = "0.2.2"
 
 [dependencies.cortex-m-rt]
 features = ["abort-on-panic"]
-version = "0.3.6"
+version = "0.3.9"
+
+[dependencies.cortex-m-rtfm]
+git = "https://github.com/japaric/cortex-m-rtfm"
 
 [dependencies.nb]
 git = "https://github.com/japaric/nb"
@@ -58,3 +53,7 @@ optional = false
 [profile.release]
 debug = true
 lto = true
+
+[profile.dev]
+codegen-units = 1
+incremental = false
